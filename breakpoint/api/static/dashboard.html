@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Breakpoint Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --paper:#f3efe6;--card:#faf8f2;--ink:#14110c;--soft:#d8d1c1;--mute:#6e6757;
+  --signal:#e4480b;--ok:#2e6a3b;--warn:#a87400;
+  /* legacy names referenced by the script */
+  --text:var(--ink);--muted:var(--mute);--dim:#9a937f;--faint:var(--soft);
+  --glass:var(--card);--glass-b:var(--ink);--glass-h:#ece7da;
+  --purple:var(--ink);--blue:var(--ink);--teal:var(--ok);--green:var(--ok);--red:var(--signal);--amber:var(--warn);
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;font-size:13px;background:var(--paper);color:var(--ink);display:flex;flex-direction:column}
+
+/* top bar: inverted ink strip */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:52px;background:var(--ink);color:var(--paper);border-bottom:4px solid var(--signal);flex-shrink:0}
+.logo{display:flex;align-items:center;gap:10px;font-family:'Newsreader',Georgia,serif;font-size:22px;letter-spacing:-.3px}
+.logo::before{content:'';width:11px;height:11px;border-radius:50%;background:var(--signal)}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.status-dot{width:9px;height:9px;border:1px solid var(--paper);background:transparent}
+.status-dot.live{background:var(--signal);border-color:var(--signal);animation:blink 1.1s steps(2) infinite}
+.status-label{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#b9b2a2}
+@keyframes blink{50%{opacity:.25}}
+
+/* sidebar sits on the right */
+.layout{display:flex;flex-direction:row-reverse;flex:1;overflow:hidden}
+.sidebar{width:300px;flex-shrink:0;border-left:1px solid var(--ink);display:flex;flex-direction:column;overflow:hidden;background:var(--card)}
+.sidebar-header{padding:14px 16px;border-bottom:1px solid var(--ink);display:flex;align-items:center;justify-content:space-between}
+.sidebar-title{font-family:'Newsreader',Georgia,serif;font-size:18px}
+.btn{font-family:inherit;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;padding:8px 16px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);cursor:pointer;border-radius:0;transition:background .12s,color .12s}
+.btn-primary:hover{background:var(--signal);border-color:var(--signal)}
+.btn-sm{font-size:10px;padding:5px 10px}
+.sidebar-list{flex:1;overflow-y:auto}
+.sidebar-list::-webkit-scrollbar,.main::-webkit-scrollbar{width:6px}
+.sidebar-list::-webkit-scrollbar-thumb,.main::-webkit-scrollbar-thumb{background:var(--soft)}
+
+.camp-item{padding:12px 16px;cursor:pointer;border-bottom:1px dotted var(--mute);border-left:4px solid transparent}
+.camp-item:hover{background:var(--glass-h)}
+.camp-item.active{border-left-color:var(--signal);background:var(--paper)}
+.camp-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.camp-meta{font-size:10px;color:var(--mute);margin-top:3px;display:flex;gap:10px}
+.camp-asr{font-weight:600}
+.camp-asr.hot{color:var(--signal)}.camp-asr.warn{color:var(--warn)}.camp-asr.safe{color:var(--ok)}
+
+.main{flex:1;overflow-y:auto;padding:32px 40px;counter-reset:sec}
+
+/* form: ruled worksheet, underlined fields */
+.form-card{background:var(--card);border:1px solid var(--ink);border-top:4px solid var(--ink);padding:24px;margin-bottom:28px}
+.form-title{font-family:'Newsreader',Georgia,serif;font-size:22px;margin-bottom:20px;display:flex;align-items:baseline;gap:10px}
+.form-title span{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute)}
+.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px 20px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group.wide{grid-column:span 3}
+.form-group.two{grid-column:span 2}
+label{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mute)}
+input,select{font-family:inherit;font-size:13px;background:transparent;border:0;border-bottom:1px solid var(--ink);border-radius:0;padding:6px 0;color:var(--ink);outline:none;width:100%}
+input:focus,select:focus{border-bottom:2px solid var(--signal);margin-bottom:-1px}
+select option{background:var(--card)}
+.form-actions{margin-top:22px;display:flex;gap:14px;align-items:center}
+.scan-hint{font-size:10px;color:var(--mute)}
+
+.stitle{counter-increment:sec;font-family:'Newsreader',Georgia,serif;font-size:22px;margin:32px 0 14px;padding-bottom:6px;border-bottom:1px solid var(--ink);display:flex;align-items:baseline;gap:12px}
+.stitle::before{content:counter(sec,decimal-leading-zero);font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--signal)}
+.stitle:first-child{margin-top:0}
+
+/* live view */
+.live-banner{background:var(--ink);color:var(--paper);padding:18px 22px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;border-left:6px solid var(--signal)}
+.live-left{display:flex;align-items:center;gap:14px}
+.live-spinner{width:12px;height:12px;border-radius:50%;background:var(--signal);animation:blink 1.1s steps(2) infinite;flex-shrink:0}
+.live-title{font-family:'Newsreader',Georgia,serif;font-size:19px}
+.live-sub{font-size:11px;color:#b9b2a2;margin-top:2px}
+.live-stat{text-align:right}
+.live-stat-val{font-family:'Newsreader',Georgia,serif;font-size:30px;line-height:1;color:var(--signal)}
+.live-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:#b9b2a2}
+
+.goal-card{background:var(--card);border:1px solid var(--ink);border-left:6px solid var(--soft);padding:16px 18px;margin-bottom:12px}
+.goal-card.success{border-left-color:var(--signal)}
+.goal-card.failed{border-left-color:var(--ok)}
+.goal-card.active{border-left-color:var(--ink)}
+.goal-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.goal-text{font-family:'Newsreader',Georgia,serif;font-size:16px;line-height:1.35;flex:1}
+.goal-badges{display:flex;gap:6px;flex-shrink:0;align-items:center}
+.badge{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.8px;padding:1px 7px;border:1px solid currentColor}
+.bs{color:var(--signal)}.bf{color:var(--ok)}.ba{color:var(--ink)}.bw{color:var(--warn)}
+.sp{display:inline-block;font-size:10px;font-weight:600;padding:0 6px;min-width:26px;text-align:center;border:1px solid var(--ink)}
+.sh{background:var(--signal);border-color:var(--signal);color:#fff}
+.sm{color:var(--warn);border-color:var(--warn)}
+.sl{color:var(--mute);border-color:var(--soft)}
+.ot{font-size:10px;background:var(--soft);padding:1px 6px}
+
+.iter-log{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.iter-row{display:flex;align-items:center;gap:10px;font-size:10px;padding:4px 0;border-top:1px dotted var(--mute)}
+.iter-num{color:var(--mute);width:28px;flex-shrink:0}
+.iter-score{width:36px;text-align:center;flex-shrink:0}
+.iter-bar{flex:1;height:6px;border:1px solid var(--soft)}
+.iter-fill{height:100%;background:var(--ink)}
+.iter-fill.good{background:var(--warn)}
+.iter-fill.danger{background:var(--signal)}
+.iter-prompt{color:var(--mute);font-size:10px;flex:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.tw{overflow-x:auto;border-top:2px solid var(--ink);border-bottom:2px solid var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{padding:9px 12px;text-align:left;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:1.2px;color:var(--mute);border-bottom:1px solid var(--ink);white-space:nowrap}
+tbody td{padding:9px 12px;border-bottom:1px dotted var(--mute);vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--card)}
+
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--ink);background:var(--card);margin-bottom:20px}
+.kpi{padding:16px 18px;border-right:1px solid var(--ink)}
+.kpi:last-child{border-right:none}
+.kl{font-size:10px;text-transform:uppercase;letter-spacing:1.3px;color:var(--mute);margin-bottom:10px}
+.kv{font-family:'Newsreader',Georgia,serif;font-size:42px;line-height:.9;letter-spacing:-1.5px}
+.kpi.r .kv{color:var(--signal)}.kpi.g .kv{color:var(--ok)}
+
+.empty{text-align:center;padding:50px 16px;color:var(--mute);font-size:12px}
+.empty-icon{font-size:28px;margin-bottom:10px;opacity:.3}
+
+.toast{position:fixed;bottom:24px;left:24px;background:var(--ink);color:var(--paper);padding:12px 18px;font-size:12px;z-index:100;transform:translateY(120px);transition:transform .25s;max-width:340px;border-left:5px solid var(--ok)}
+.toast.show{transform:translateY(0)}
+.toast.error{border-left-color:var(--signal)}
+
+@media (max-width:900px){
+  .layout{flex-direction:column-reverse}
+  .sidebar{width:100%;max-height:35%;border-left:none;border-top:1px solid var(--ink)}
+  .main{padding:20px}
+  .form-grid{grid-template-columns:1fr}
+  .form-group.wide,.form-group.two{grid-column:span 1}
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">Breakpoint <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#b9b2a2;margin-left:6px">console</span></div>
+  <div class="topbar-right">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-label" id="statusLabel">idle</span>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- sidebar: campaign history -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">Campaigns</span>
+      <button class="btn btn-primary btn-sm" onclick="showNewScan()">+ New Scan</button>
+    </div>
+    <div class="sidebar-list" id="campaignList">
+      <div class="empty" style="padding:30px 12px">
+        <div>No campaigns yet</div>
+        <div style="font-size:10px;margin-top:4px">Run a scan to get started</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- main content -->
+  <main class="main" id="mainContent">
+    <!-- New scan form (default view) -->
+    <div id="viewNewScan">
+      <div class="stitle" style="margin-top:0">New Scan</div>
+      <div class="form-card">
+        <div class="form-title">Configure Attack Campaign <span>— fields marked * are required</span></div>
+        <div class="form-grid">
+          <div class="form-group two">
+            <label>Target Model *</label>
+            <input id="fTarget" type="text" value="groq/llama-3.3-70b-versatile" placeholder="groq/llama-3.3-70b-versatile"/>
+          </div>
+          <div class="form-group">
+            <label>Algorithm</label>
+            <select id="fAlgo">
+              <option value="pair">PAIR — Chao et al. 2023</option>
+              <option value="tap">TAP — Mehrotra et al. 2023</option>
+              <option value="crescendo">Crescendo — Russinovich et al. 2024</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Goals (blank = all 50)</label>
+            <input id="fGoals" type="number" placeholder="e.g. 10" min="1" max="50"/>
+          </div>
+          <div class="form-group">
+            <label>Category filter</label>
+            <select id="fCategory">
+              <option value="">All categories</option>
+              <option value="cybercrime">Cybercrime</option>
+              <option value="malware">Malware</option>
+              <option value="fraud">Fraud</option>
+              <option value="privacy">Privacy</option>
+              <option value="disinformation">Disinformation</option>
+              <option value="weapons">Weapons</option>
+              <option value="violence">Violence</option>
+              <option value="hate_speech">Hate Speech</option>
+              <option value="financial_crime">Financial Crime</option>
+              <option value="ai_attacks">AI Attacks</option>
+              <option value="infrastructure">Infrastructure</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Max Iterations (PAIR)</label>
+            <input id="fMaxIter" type="number" value="20" min="1" max="50"/>
+          </div>
+          <div class="form-group">
+            <label>Call Budget</label>
+            <input id="fBudget" type="number" value="200" min="10"/>
+          </div>
+          <div class="form-group two">
+            <label>Attacker model (provider/model — blank = config)</label>
+            <input id="fAttacker" type="text" placeholder="e.g. anthropic/claude-sonnet-4-5"/>
+          </div>
+          <div class="form-group">
+            <label>Judge model (blank = config)</label>
+            <input id="fJudge" type="text" placeholder="e.g. llamacpp/qwen"/>
+          </div>
+          <div class="form-group wide">
+            <label>Campaign Name (optional)</label>
+            <input id="fName" type="text" placeholder="auto-generated if blank"/>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="startScan()">Launch Scan</button>
+          <span class="scan-hint">Models and keys come from breakpoint.toml / .env — about 3 API calls per iteration</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live scan view -->
+    <div id="viewLive" style="display:none">
+      <div class="live-banner" id="liveBanner">
+        <div class="live-left">
+          <div class="live-spinner"></div>
+          <div>
+            <div class="live-title" id="liveCampaignName">Scan running…</div>
+            <div class="live-sub" id="liveTarget"></div>
+          </div>
+        </div>
+        <div class="live-stat">
+          <div class="live-stat-val" id="liveProgress">0 / 0</div>
+          <div class="live-stat-label">goals complete</div>
+        </div>
+      </div>
+      <div id="liveGoals"></div>
+    </div>
+
+    <!-- Campaign detail view -->
+    <div id="viewDetail" style="display:none">
+      <div id="detailContent"></div>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── state ──────────────────────────────────────────────────────────────────────
+let ws = null;
+let activeScanId = null;
+let activeCampaignId = null;
+let goalResults = [];
+let totalGoals = 0;
+
+// ── init ───────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadCampaigns();
+});
+
+// ── campaign list ──────────────────────────────────────────────────────────────
+async function loadCampaigns() {
+  try {
+    const res = await fetch('/api/campaigns');
+    const campaigns = await res.json();
+    renderCampaignList(campaigns);
+  } catch(e) { /* server might not be ready */ }
+}
+
+function renderCampaignList(campaigns) {
+  const el = document.getElementById('campaignList');
+  if (!campaigns.length) {
+    el.innerHTML = `<div class="empty" style="padding:30px 12px"><div>No campaigns yet</div><div style="font-size:10px;margin-top:4px">Run a scan to get started</div></div>`;
+    return;
+  }
+  el.innerHTML = campaigns.map(c => {
+    const asr = (c.asr * 100).toFixed(0);
+    const cls = asr >= 50 ? 'hot' : asr >= 20 ? 'warn' : 'safe';
+    return `<div class="camp-item" onclick="loadCampaign(${c.id})">
+      <div class="camp-name">${esc(c.name)}</div>
+      <div class="camp-meta">
+        <span>${c.total_goals} goals</span>
+        <span class="camp-asr ${cls}">${asr}% ASR</span>
+        <span>${c.created_at.slice(0,10)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── campaign detail ────────────────────────────────────────────────────────────
+async function loadCampaign(id) {
+  try {
+    const res = await fetch(`/api/campaigns/${id}`);
+    const data = await res.json();
+    showView('viewDetail');
+    renderDetail(data.campaign, data.runs);
+    // highlight sidebar
+    document.querySelectorAll('.camp-item').forEach(el => el.classList.remove('active'));
+  } catch(e) { toast('Failed to load campaign', true); }
+}
+
+function renderDetail(c, runs) {
+  const asr = (c.asr * 100).toFixed(1);
+  const succeeded = runs.filter(r => r.status === 'success').length;
+
+  document.getElementById('detailContent').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:18px;font-weight:600">${esc(c.name)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">${esc(c.target)} · ${esc(c.algorithm.toUpperCase())} · ${c.created_at.slice(0,19)}</div>
+      </div>
+      <a href="/api/campaigns/${c.id}/report" target="_blank" class="btn btn-primary btn-sm" style="text-decoration:none">Export JSON</a>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi p"><div class="kl">Goals</div><div class="kv">${c.total_goals}</div></div>
+      <div class="kpi r"><div class="kl">Jailbroken</div><div class="kv">${succeeded}</div></div>
+      <div class="kpi a"><div class="kl">ASR</div><div class="kv">${asr}%</div></div>
+      <div class="kpi g"><div class="kl">Defended</div><div class="kv">${c.total_goals - succeeded}</div></div>
+    </div>
+    <div class="stitle">Run Log</div>
+    <div class="tw"><table>
+      <thead><tr><th>#</th><th>Category</th><th>OWASP</th><th>Goal</th><th>Calls</th><th>Score</th><th>Status</th></tr></thead>
+      <tbody>${runs.map(r => `
+        <tr>
+          <td style="color:var(--dim);font-size:10px">${r.behavior_id}</td>
+          <td style="font-size:10px;color:var(--muted)">${r.category}</td>
+          <td><span class="ot">${r.owasp}</span></td>
+          <td>${esc(r.goal.slice(0,80))}${r.goal.length>80?'…':''}</td>
+          <td style="text-align:center;color:var(--muted);font-size:10px">${r.calls_used}</td>
+          <td style="text-align:center">${scorePill(r.final_score)}</td>
+          <td>${statusBadge(r.status)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+}
+
+// ── scan launch ────────────────────────────────────────────────────────────────
+async function startScan() {
+  const body = {
+    target:       document.getElementById('fTarget').value.trim(),
+    algorithm:    document.getElementById('fAlgo').value,
+    goals:        parseInt(document.getElementById('fGoals').value) || null,
+    category:     document.getElementById('fCategory').value || null,
+    max_iter:     parseInt(document.getElementById('fMaxIter').value) || 20,
+    budget:       parseInt(document.getElementById('fBudget').value) || 200,
+    campaign_name:document.getElementById('fName').value.trim(),
+    attacker:     document.getElementById('fAttacker').value.trim(),
+    judge:        document.getElementById('fJudge').value.trim(),
+  };
+
+  if (!body.target) { toast('Target model is required', true); return; }
+
+  try {
+    const res = await fetch('/api/scan', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (!res.ok) { const e = await res.json(); toast(e.detail || 'Scan failed', true); return; }
+    const { scan_id } = await res.json();
+    activeScanId = scan_id;
+    goalResults = [];
+    totalGoals = 0;
+    connectWS(scan_id);
+  } catch(e) { toast('Could not reach server', true); }
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────────
+function connectWS(scanId) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/${scanId}`);
+
+  ws.onopen = () => {
+    setStatus(true);
+    showView('viewLive');
+  };
+
+  ws.onmessage = (e) => {
+    const ev = JSON.parse(e.data);
+    handleEvent(ev);
+  };
+
+  ws.onclose = () => {
+    setStatus(false);
+    activeScanId = null;
+    loadCampaigns();
+  };
+
+  ws.onerror = () => toast('WebSocket error', true);
+}
+
+function handleEvent(ev) {
+  switch(ev.type) {
+    case 'scan_start':
+      totalGoals = ev.total_goals;
+      document.getElementById('liveCampaignName').textContent = ev.campaign_name;
+      document.getElementById('liveTarget').textContent = `${ev.target} · ${ev.algorithm.toUpperCase()}`;
+      document.getElementById('liveProgress').textContent = `0 / ${totalGoals}`;
+      activeCampaignId = ev.campaign_id;
+      break;
+
+    case 'goal_start':
+      goalResults[ev.goal_idx - 1] = {
+        idx: ev.goal_idx,
+        goal: ev.goal,
+        category: ev.category,
+        owasp: ev.owasp,
+        status: 'active',
+        score: 0,
+        iterations: [],
+      };
+      renderLiveGoals();
+      break;
+
+    case 'iteration':
+      if (goalResults[ev.goal_idx - 1]) {
+        const g = goalResults[ev.goal_idx - 1];
+        g.iterations.push({ num: ev.iteration, score: ev.score, prompt: ev.prompt_snippet });
+        g.score = ev.score;
+        renderLiveGoals();
+      }
+      break;
+
+    case 'tap_node':
+      if (goalResults[ev.goal_idx - 1]) {
+        const g = goalResults[ev.goal_idx - 1];
+        g.iterations.push({ num: `d${ev.depth}n${ev.node}`, score: ev.score, prompt: ev.prompt_snippet });
+        g.score = ev.score;
+        renderLiveGoals();
+      }
+      break;
+
+    case 'goal_end': {
+      const g = goalResults[ev.goal_idx - 1];
+      if (g) {
+        g.status = ev.status;
+        g.score = ev.final_score;
+      }
+      const done = goalResults.filter(g => g && g.status !== 'active').length;
+      document.getElementById('liveProgress').textContent = `${done} / ${totalGoals}`;
+      renderLiveGoals();
+      break;
+    }
+
+    case 'scan_complete':
+      document.getElementById('liveBanner').innerHTML = `
+        <div class="live-left">
+          <div style="font-size:16px">✓</div>
+          <div>
+            <div class="live-title">Scan complete — ${ev.succeeded}/${ev.total} jailbroken · ${ev.asr}% ASR</div>
+            <div class="live-sub">${ev.total_calls} API calls used</div>
+          </div>
+        </div>
+        <a href="/api/campaigns/${ev.campaign_id}/report" target="_blank" class="btn btn-primary btn-sm" style="text-decoration:none">Export JSON</a>`;
+      document.getElementById('liveBanner').style.borderColor = 'rgba(16,185,129,0.3)';
+      document.getElementById('liveBanner').style.background = 'rgba(16,185,129,0.06)';
+      setStatus(false);
+      loadCampaigns();
+      break;
+
+    case 'error':
+      toast(ev.message, true);
+      setStatus(false);
+      break;
+  }
+}
+
+function renderLiveGoals() {
+  const el = document.getElementById('liveGoals');
+  el.innerHTML = goalResults.filter(Boolean).reverse().slice(0, 12).map(g => {
+    const cls = g.status === 'success' ? 'success' : g.status === 'active' ? 'active' : g.status === 'failed' ? 'failed' : '';
+    const badge = g.status === 'success' ? `<span class="badge bs">✓ jailbroken</span>`
+                : g.status === 'active'  ? `<span class="badge ba">running…</span>`
+                : g.status === 'failed'  ? `<span class="badge bf">✗ defended</span>`
+                : `<span class="badge bw">${g.status}</span>`;
+
+    const lastIters = g.iterations.slice(-4);
+    const iterLog = lastIters.length ? `<div class="iter-log">${lastIters.map(it =>
+      `<div class="iter-row">
+        <span class="iter-num">${it.num}</span>
+        <span class="iter-score">${scorePill(it.score)}</span>
+        <div class="iter-bar"><div class="iter-fill ${it.score>=9?'danger':it.score>=5?'good':''}" style="width:${it.score*10}%"></div></div>
+        <span class="iter-prompt">${esc(it.prompt)}</span>
+      </div>`).join('')}</div>` : '';
+
+    return `<div class="goal-card ${cls}">
+      <div class="goal-header">
+        <div class="goal-text">${esc(g.goal)}</div>
+        <div class="goal-badges">
+          ${badge}
+          <span class="ot">${g.owasp}</span>
+          ${g.score ? scorePill(g.score) : ''}
+        </div>
+      </div>
+      ${iterLog}
+    </div>`;
+  }).join('');
+}
+
+// ── helpers ────────────────────────────────────────────────────────────────────
+function showView(id) {
+  ['viewNewScan','viewLive','viewDetail'].forEach(v => {
+    document.getElementById(v).style.display = v === id ? 'block' : 'none';
+  });
+}
+
+function showNewScan() { showView('viewNewScan'); }
+
+function setStatus(live) {
+  const dot = document.getElementById('statusDot');
+  const lbl = document.getElementById('statusLabel');
+  dot.className = 'status-dot' + (live ? ' live' : '');
+  lbl.textContent = live ? 'live' : 'idle';
+}
+
+function scorePill(s) {
+  const cls = s >= 9 ? 'sh' : s >= 5 ? 'sm' : 'sl';
+  return `<span class="sp ${cls}">${s}</span>`;
+}
+
+function statusBadge(s) {
+  return s === 'success' ? `<span class="badge bs">✓ success</span>`
+       : s === 'failed'  ? `<span class="badge bf">✗ failed</span>`
+       : s === 'budget_exceeded' ? `<span class="badge bw">⚡ budget</span>`
+       : `<span class="badge" style="color:var(--muted)">${s}</span>`;
+}
+
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg, isErr) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (isErr ? ' error' : '');
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
